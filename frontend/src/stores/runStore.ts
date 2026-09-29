@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../utils/db';
 import { uid } from '../utils/id';
+import { deleteEntity } from '../utils/sealService';
 import type { DrillRun, RunAnomaly, RunShift } from '../types/drill-run';
 import { footageOf, gradeOf, isAnomaly, recoveryOf, RECOVERY_GRADE_TEXT } from '../utils/recovery';
 
@@ -23,8 +24,8 @@ interface RunState {
   hydrate: () => Promise<void>;
   addRun: (input: RunInput) => Promise<DrillRun>;
   updateRun: (id: string, patch: Partial<RunInput>) => Promise<void>;
-  removeRun: (id: string) => Promise<void>;
-  removeByHole: (holeId: string) => Promise<void>;
+  /** 清理回次：涉及封存时软删除并保留版本链，返回 soft/hard */
+  removeRun: (id: string) => Promise<'soft' | 'hard'>;
 }
 
 /** 回次与采取率派生值：进尺与采取率均由起止深度、岩芯长度自动计算 */
@@ -33,8 +34,8 @@ export const useRunStore = create<RunState>()((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const runs = await db.runs.orderBy('fromDepth').toArray();
-    set({ runs, hydrated: true });
+    const all = await db.runs.orderBy('fromDepth').toArray();
+    set({ runs: all.filter((r) => !r.deletedAt), hydrated: true });
   },
 
   addRun: async (input) => {
@@ -74,14 +75,9 @@ export const useRunStore = create<RunState>()((set, get) => ({
   },
 
   removeRun: async (id) => {
-    await db.runs.delete(id);
+    const mode = await deleteEntity('run', id);
     set({ runs: get().runs.filter((r) => r.id !== id) });
-  },
-
-  removeByHole: async (holeId) => {
-    const ids = get().runs.filter((r) => r.holeId === holeId).map((r) => r.id);
-    await db.runs.bulkDelete(ids);
-    set({ runs: get().runs.filter((r) => r.holeId !== holeId) });
+    return mode;
   },
 }));
 

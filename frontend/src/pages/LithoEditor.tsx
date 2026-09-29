@@ -4,6 +4,7 @@ import type { TableColumnsType } from 'antd';
 import DepthRangeInput from '../components/common/DepthRangeInput';
 import LithoColumn from '../components/common/LithoColumn';
 import EmptyPanel from '../components/common/EmptyPanel';
+import VersionHistoryModal from '../components/review/VersionHistoryModal';
 import { useHoleStore } from '../stores/holeStore';
 import { useRunStore } from '../stores/runStore';
 import { useLithoStore } from '../stores/lithoStore';
@@ -53,6 +54,7 @@ export default function LithoEditor() {
   const [conflictIds, setConflictIds] = useState<string[]>([]);
   /** 深度区间以本地 state 为唯一数据源（Form.useWatch 在弹窗挂载前可能读不到值） */
   const [range, setRange] = useState<{ from: number; to: number }>({ from: 0, to: 0 });
+  const [versionOf, setVersionOf] = useState<LithoLog | null>(null);
 
   const holeOptions = holes.map((hole) => ({ label: `${hole.holeNo} · 设计 ${hole.designDepth}m`, value: hole.id }));
   const activeHoleId = currentHoleId || holes[0]?.id || '';
@@ -175,10 +177,20 @@ export default function LithoEditor() {
       fixed: 'right',
       render: (_, record) => (
         <Space size={2}>
+          <Button size="small" type="link" onClick={() => setVersionOf(record)}>
+            版本链
+          </Button>
           <Button size="small" type="link" onClick={() => openEdit(record)}>
             编辑
           </Button>
-          <Popconfirm title={`确认删除 ${record.fromDepth}~${record.toDepth}m 编录？`} onConfirm={() => removeLitho(record.id).then(() => message.success('已删除'))}>
+          <Popconfirm
+            title={`确认删除 ${record.fromDepth}~${record.toDepth}m 编录？`}
+            onConfirm={() =>
+              removeLitho(record.id).then((mode) =>
+                message.success(mode === 'soft' ? '该岩性段涉及封存，已软删除并保留版本链与复核入口' : '已删除'),
+              )
+            }
+          >
             <Button size="small" type="link" danger>
               删除
             </Button>
@@ -315,6 +327,16 @@ export default function LithoEditor() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {versionOf ? (
+        <VersionHistoryModal
+          open
+          onClose={() => setVersionOf(null)}
+          entityType="litho"
+          entityId={versionOf.id}
+          title={`岩性 ${versionOf.fromDepth}~${versionOf.toDepth}m`}
+        />
+      ) : null}
     </div>
   );
 }

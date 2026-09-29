@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --port 21811"
+    "preview": "vite preview --port 21811",
+    "test:seal": "tsx scripts/seal-e2e.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.2",
@@ -23,6 +24,8 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "fake-indexeddb": "^6.2.5",
+    "tsx": "^4.23.15",
     "typescript": "~5.7.3",
     "vite": "^6.1.0"
   }

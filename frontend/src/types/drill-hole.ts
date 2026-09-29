@@ -36,6 +36,8 @@ export interface DrillHole {
   surveyData: SurveyPoint[];
   /** 备注 */
   remark?: string;
+  /** 清理时间（软删除墓碑）：涉及封存深度的记录被清理时保留，正常记录无此值 */
+  deletedAt?: string;
 }
 
 export const RIG_NOS: string[] = ['XY-1', 'XY-2', 'XY-4', 'HGY-300'];

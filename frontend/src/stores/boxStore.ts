@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../utils/db';
 import { uid } from '../utils/id';
+import { deleteEntity } from '../utils/sealService';
 import type { CoreBox } from '../types/core-box';
 
 export interface BoxInput {
@@ -23,7 +24,8 @@ interface BoxState {
   hydrate: () => Promise<void>;
   addBox: (input: BoxInput) => Promise<CoreBox>;
   updateBox: (id: string, patch: Partial<BoxInput>) => Promise<void>;
-  removeBox: (id: string) => Promise<void>;
+  /** 清理岩芯箱：涉及封存时软删除并保留版本链，返回 soft/hard */
+  removeBox: (id: string) => Promise<'soft' | 'hard'>;
   /** 标记/取消破损格 */
   toggleDamagedSlot: (id: string, slot: number) => Promise<void>;
 }
@@ -34,8 +36,8 @@ export const useBoxStore = create<BoxState>()((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const boxes = await db.boxes.orderBy('boxNo').toArray();
-    set({ boxes, hydrated: true });
+    const all = await db.boxes.orderBy('boxNo').toArray();
+    set({ boxes: all.filter((b) => !b.deletedAt), hydrated: true });
   },
 
   addBox: async (input) => {
@@ -67,8 +69,9 @@ export const useBoxStore = create<BoxState>()((set, get) => ({
   },
 
   removeBox: async (id) => {
-    await db.boxes.delete(id);
+    const mode = await deleteEntity('box', id);
     set({ boxes: get().boxes.filter((b) => b.id !== id) });
+    return mode;
   },
 
   toggleDamagedSlot: async (id, slot) => {

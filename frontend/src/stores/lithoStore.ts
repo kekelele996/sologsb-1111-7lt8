@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../utils/db';
 import { uid } from '../utils/id';
+import { deleteEntity } from '../utils/sealService';
 import type { Alteration, LithoLog, Lithology, Mineralization, RangeConflict } from '../types/litho-log';
 import { findConflicts } from '../utils/recovery';
 
@@ -26,7 +27,8 @@ interface LithoState {
   checkConflicts: (input: Pick<LithoInput, 'holeId' | 'fromDepth' | 'toDepth'>, ignoreId?: string) => RangeConflict[];
   addLitho: (input: LithoInput) => Promise<{ log?: LithoLog; conflicts: RangeConflict[] }>;
   updateLitho: (id: string, patch: Partial<LithoInput>) => Promise<{ log?: LithoLog; conflicts: RangeConflict[] }>;
-  removeLitho: (id: string) => Promise<void>;
+  /** 清理岩性区间：涉及封存时软删除并保留版本链，返回 soft/hard */
+  removeLitho: (id: string) => Promise<'soft' | 'hard'>;
 }
 
 /** 岩性区间与冲突校验 */
@@ -35,8 +37,8 @@ export const useLithoStore = create<LithoState>()((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const lithos = await db.lithos.orderBy('fromDepth').toArray();
-    set({ lithos, hydrated: true });
+    const all = await db.lithos.orderBy('fromDepth').toArray();
+    set({ lithos: all.filter((l) => !l.deletedAt), hydrated: true });
   },
 
   checkConflicts: (input, ignoreId) => {
@@ -95,7 +97,8 @@ export const useLithoStore = create<LithoState>()((set, get) => ({
   },
 
   removeLitho: async (id) => {
-    await db.lithos.delete(id);
+    const mode = await deleteEntity('litho', id);
     set({ lithos: get().lithos.filter((l) => l.id !== id) });
+    return mode;
   },
 }));

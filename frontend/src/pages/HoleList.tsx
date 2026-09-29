@@ -4,6 +4,7 @@ import type { TableColumnsType } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import FilterBar from '../components/common/FilterBar';
 import EmptyPanel from '../components/common/EmptyPanel';
+import VersionHistoryModal from '../components/review/VersionHistoryModal';
 import { useHoleFilter } from '../hooks/useHoleFilter';
 import { useHoleStore } from '../stores/holeStore';
 import { useRunStore } from '../stores/runStore';
@@ -54,13 +55,13 @@ export default function HoleList() {
   const updateHole = useHoleStore((s) => s.updateHole);
   const removeHole = useHoleStore((s) => s.removeHole);
   const runs = useRunStore((s) => s.runs);
-  const removeRunsByHole = useRunStore((s) => s.removeByHole);
   const boxes = useBoxStore((s) => s.boxes);
 
   const filter = useHoleFilter();
   const [form] = Form.useForm<HoleFormValues>();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<DrillHole | null>(null);
+  const [versionOf, setVersionOf] = useState<DrillHole | null>(null);
 
   const visible = useMemo(() => filter.apply(holes), [holes, filter]);
 
@@ -162,15 +163,22 @@ export default function HoleList() {
       fixed: 'right',
       render: (_, record) => (
         <Space size={2}>
+          <Button size="small" type="link" onClick={() => setVersionOf(record)}>
+            版本链
+          </Button>
           <Button size="small" type="link" onClick={() => openEdit(record)}>
             编辑
           </Button>
           <Popconfirm
-            title={`确认删除 ${record.holeNo}？（同时清除其回次）`}
+            title={`确认删除 ${record.holeNo}？`}
+            description="将一并级联清理其回次、岩芯箱与岩性；涉及封存的记录会软删除并保留版本链。"
             onConfirm={async () => {
-              await removeRunsByHole(record.id);
-              await removeHole(record.id);
-              message.success('已删除钻孔及其回次');
+              const mode = await removeHole(record.id);
+              message.success(
+                mode === 'soft'
+                  ? '该孔涉及封存，已软删除并保留版本链与复核入口'
+                  : '已删除钻孔及其回次、岩芯箱与岩性',
+              );
             }}
           >
             <Button size="small" type="link" danger>
@@ -274,6 +282,16 @@ export default function HoleList() {
         </Form>
         <Alert type="info" showIcon message="终孔深度小于设计孔深时，将自动计入「未达设计 · 待补勘」清单。" />
       </Modal>
+
+      {versionOf ? (
+        <VersionHistoryModal
+          open
+          onClose={() => setVersionOf(null)}
+          entityType="hole"
+          entityId={versionOf.id}
+          title={`钻孔 ${versionOf.holeNo}`}
+        />
+      ) : null}
     </div>
   );
 }

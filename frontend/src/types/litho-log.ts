@@ -32,6 +32,8 @@ export interface LithoLog {
   logger: string;
   /** 备注 */
   remark?: string;
+  /** 清理时间（软删除墓碑）：涉及封存深度时保留，正常记录无此值 */
+  deletedAt?: string;
 }
 
 /** 区间冲突 */

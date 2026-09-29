@@ -5,6 +5,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import BoxGrid from '../components/common/BoxGrid';
 import DepthRangeInput from '../components/common/DepthRangeInput';
 import EmptyPanel from '../components/common/EmptyPanel';
+import VersionHistoryModal from '../components/review/VersionHistoryModal';
 import { useHoleStore } from '../stores/holeStore';
 import { useRunStore } from '../stores/runStore';
 import { useBoxStore } from '../stores/boxStore';
@@ -58,6 +59,7 @@ export default function CoreBoxList() {
   const [selectedBoxId, setSelectedBoxId] = useState('');
   /** 深度区间以本地 state 为唯一数据源（Form.useWatch 在弹窗挂载前可能读不到值） */
   const [range, setRange] = useState<{ from: number; to: number }>({ from: 0, to: 0 });
+  const [versionOf, setVersionOf] = useState<CoreBox | null>(null);
 
   const holeOptions = holes.map((hole) => ({ label: `${hole.holeNo} · ${hole.rigNo}`, value: hole.id }));
   const activeHoleId = currentHoleId || holes[0]?.id || '';
@@ -184,10 +186,20 @@ export default function CoreBoxList() {
           <Button size="small" type="link" onClick={() => setSelectedBoxId(record.id)}>
             查看格位
           </Button>
+          <Button size="small" type="link" onClick={() => setVersionOf(record)}>
+            版本链
+          </Button>
           <Button size="small" type="link" onClick={() => openEdit(record)}>
             编辑
           </Button>
-          <Popconfirm title={`确认删除岩芯箱 ${record.boxNo}？`} onConfirm={() => removeBox(record.id).then(() => message.success('已删除'))}>
+          <Popconfirm
+            title={`确认删除岩芯箱 ${record.boxNo}？`}
+            onConfirm={() =>
+              removeBox(record.id).then((mode) =>
+                message.success(mode === 'soft' ? '该岩芯箱涉及封存，已软删除并保留版本链与复核入口' : '已删除'),
+              )
+            }
+          >
             <Button size="small" type="link" danger>
               删除
             </Button>
@@ -302,6 +314,16 @@ export default function CoreBoxList() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {versionOf ? (
+        <VersionHistoryModal
+          open
+          onClose={() => setVersionOf(null)}
+          entityType="box"
+          entityId={versionOf.id}
+          title={`岩芯箱 ${versionOf.boxNo}`}
+        />
+      ) : null}
     </div>
   );
 }

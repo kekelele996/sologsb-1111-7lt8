@@ -7,14 +7,18 @@ import {
   ExperimentOutlined,
   ProfileOutlined,
   BarsOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { seedIfEmpty } from './utils/seed';
 import { downloadText, exportBackupJson } from './utils/export';
+import { onDataChanged } from './utils/sealService';
+import { backfillInitialVersions } from './utils/versions';
 import { useHoleStore } from './stores/holeStore';
 import { useRunStore } from './stores/runStore';
 import { useBoxStore } from './stores/boxStore';
 import { useLithoStore } from './stores/lithoStore';
+import { useSealStore } from './stores/sealStore';
 
 const { Header, Sider, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -25,6 +29,7 @@ const MENU_ITEMS = [
   { key: '/runs', icon: <BarsOutlined />, label: <Link to="/runs">回次记录</Link> },
   { key: '/boxes', icon: <ProfileOutlined />, label: <Link to="/boxes">岩芯箱</Link> },
   { key: '/lithology', icon: <ExperimentOutlined />, label: <Link to="/lithology">岩性编录</Link> },
+  { key: '/review', icon: <SafetyCertificateOutlined />, label: <Link to="/review">封存复核台</Link> },
 ];
 
 /** 应用外壳：左侧导航 + 顶部导出备份，负责一次性的本地数据装载 */
@@ -35,6 +40,7 @@ export default function App() {
   const hydrateRuns = useRunStore((s) => s.hydrate);
   const hydrateBoxes = useBoxStore((s) => s.hydrate);
   const hydrateLithos = useLithoStore((s) => s.hydrate);
+  const hydrateSeals = useSealStore((s) => s.hydrate);
   const location = useLocation();
 
   useEffect(() => {
@@ -42,17 +48,25 @@ export default function App() {
     (async () => {
       try {
         await seedIfEmpty();
-        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos()]);
+        // 旧数据补初始版本（幂等）；随后统一装载
+        await backfillInitialVersions();
+        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos(), hydrateSeals()]);
       } catch (error) {
         message.error(`本地数据装载失败：${(error as Error).message}`);
       } finally {
         if (alive) setReady(true);
       }
     })();
+
+    // 复核决定（退回恢复）或清理（软删）发生在服务层，业务 store 统一重取，保证界面一致
+    const unsubscribe = onDataChanged(() => {
+      void Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos()]);
+    });
     return () => {
       alive = false;
+      unsubscribe();
     };
-  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, message]);
+  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, hydrateSeals, message]);
 
   const selectedKey =
     MENU_ITEMS.map((item) => item.key)
@@ -62,7 +76,7 @@ export default function App() {
   const handleExport = async () => {
     const json = await exportBackupJson();
     downloadText(`gbdrillcore-backup-${new Date().toISOString().slice(0, 10)}.json`, json);
-    message.success('已导出 IndexedDB 全量 JSON 备份');
+    message.success('已导出 IndexedDB 全量 JSON 备份（含封存与版本链）');
   };
 
   return (

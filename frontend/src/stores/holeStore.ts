@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../utils/db';
 import { uid } from '../utils/id';
+import { deleteHoleCascade } from '../utils/sealService';
 import type { DrillHole, HoleProgress, SurveyPoint } from '../types/drill-hole';
 import type { DrillRun } from '../types/drill-run';
 import { buildHoleProgress } from '../utils/recovery';
@@ -28,7 +29,11 @@ interface HoleState {
   setCurrentHole: (id: string) => void;
   addHole: (input: HoleInput) => Promise<DrillHole>;
   updateHole: (id: string, patch: Partial<HoleInput>) => Promise<void>;
-  removeHole: (id: string) => Promise<void>;
+  /**
+   * 删除钻孔（级联回次/岩芯箱/岩性）。
+   * 涉及封存时软删除并保留版本链；返回 soft=已封存保留 / hard=彻底删除。
+   */
+  removeHole: (id: string) => Promise<'soft' | 'hard'>;
   /** 当前钻孔 */
   currentHole: () => DrillHole | undefined;
 }
@@ -40,8 +45,11 @@ export const useHoleStore = create<HoleState>()((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const holes = await db.holes.orderBy('holeNo').toArray();
-    set({ holes, currentHoleId: get().currentHoleId || holes[0]?.id || '', hydrated: true });
+    const all = await db.holes.orderBy('holeNo').toArray();
+    // 已清理（软删除）的记录不在台账展示，复核台仍可从封存快照查看
+    const holes = all.filter((h) => !h.deletedAt);
+    const stillExists = holes.some((h) => h.id === get().currentHoleId);
+    set({ holes, currentHoleId: stillExists ? get().currentHoleId : holes[0]?.id || '', hydrated: true });
   },
 
   setCurrentHole: (id) => set({ currentHoleId: id }),
@@ -76,8 +84,10 @@ export const useHoleStore = create<HoleState>()((set, get) => ({
   },
 
   removeHole: async (id) => {
-    await db.holes.delete(id);
-    set({ holes: get().holes.filter((h) => h.id !== id) });
+    const mode = await deleteHoleCascade(id);
+    const holes = get().holes.filter((h) => h.id !== id);
+    set({ holes, currentHoleId: get().currentHoleId === id ? holes[0]?.id || '' : get().currentHoleId });
+    return mode;
   },
 
   currentHole: () => get().holes.find((h) => h.id === get().currentHoleId),
