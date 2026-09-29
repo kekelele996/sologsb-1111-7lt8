@@ -5,6 +5,8 @@ import dayjs, { type Dayjs } from 'dayjs';
 import BoxGrid from '../components/common/BoxGrid';
 import DepthRangeInput from '../components/common/DepthRangeInput';
 import EmptyPanel from '../components/common/EmptyPanel';
+import PendingReviewTag from '../components/review/PendingReviewTag';
+import VersionHistoryButton from '../components/review/VersionHistoryButton';
 import { useHoleStore } from '../stores/holeStore';
 import { useRunStore } from '../stores/runStore';
 import { useBoxStore } from '../stores/boxStore';
@@ -151,7 +153,16 @@ export default function CoreBoxList() {
   };
 
   const columns: TableColumnsType<CoreBox> = [
-    { title: '箱号', dataIndex: 'boxNo', width: 130, render: (v: string) => <Text strong>{v}</Text> },
+    {
+      title: '箱号',
+      width: 170,
+      render: (_, row) => (
+        <Space size={4}>
+          <Text strong>{row.boxNo}</Text>
+          <PendingReviewTag kind="box" entityId={row.id} />
+        </Space>
+      ),
+    },
     { title: '深度区间(m)', width: 130, render: (_, row) => `${row.fromDepth}~${row.toDepth}` },
     { title: '格数', dataIndex: 'slots', width: 70, align: 'right' },
     { title: '每格长度(m)', dataIndex: 'slotLength', width: 110, align: 'right' },
@@ -177,7 +188,7 @@ export default function CoreBoxList() {
     },
     {
       title: '操作',
-      width: 200,
+      width: 280,
       fixed: 'right',
       render: (_, record) => (
         <Space size={2}>
@@ -187,7 +198,14 @@ export default function CoreBoxList() {
           <Button size="small" type="link" onClick={() => openEdit(record)}>
             编辑
           </Button>
-          <Popconfirm title={`确认删除岩芯箱 ${record.boxNo}？`} onConfirm={() => removeBox(record.id).then(() => message.success('已删除'))}>
+          <VersionHistoryButton kind="box" entityId={record.id} title={record.boxNo} />
+          <Popconfirm
+            title={`确认删除岩芯箱 ${record.boxNo}？`}
+            onConfirm={async () => {
+              const mode = await removeBox(record.id);
+              message.success(mode === 'soft' ? '该岩芯箱涉及封存深度，已转为软删除并保留版本链（见封存复核台）' : '已删除');
+            }}
+          >
             <Button size="small" type="link" danger>
               删除
             </Button>
@@ -246,7 +264,7 @@ export default function CoreBoxList() {
           </Col>
           <Col xs={24}>
             <Card size="small" title="岩芯箱台账">
-              <Table rowKey="id" size="small" columns={columns} dataSource={holeBoxes} pagination={{ pageSize: 6 }} scroll={{ x: 1400 }} />
+              <Table rowKey="id" size="small" columns={columns} dataSource={holeBoxes} pagination={{ pageSize: 6 }} scroll={{ x: 1500 }} />
             </Card>
           </Col>
         </Row>

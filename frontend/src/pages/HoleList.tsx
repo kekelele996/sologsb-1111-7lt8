@@ -4,6 +4,8 @@ import type { TableColumnsType } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import FilterBar from '../components/common/FilterBar';
 import EmptyPanel from '../components/common/EmptyPanel';
+import PendingReviewTag from '../components/review/PendingReviewTag';
+import VersionHistoryButton from '../components/review/VersionHistoryButton';
 import { useHoleFilter } from '../hooks/useHoleFilter';
 import { useHoleStore } from '../stores/holeStore';
 import { useRunStore } from '../stores/runStore';
@@ -133,7 +135,16 @@ export default function HoleList() {
   };
 
   const columns: TableColumnsType<DrillHole> = [
-    { title: '孔号', dataIndex: 'holeNo', width: 110, render: (v: string) => <Text strong>{v}</Text> },
+    {
+      title: '孔号',
+      width: 170,
+      render: (_, row) => (
+        <Space size={4}>
+          <Text strong>{row.holeNo}</Text>
+          <PendingReviewTag kind="hole" entityId={row.id} />
+        </Space>
+      ),
+    },
     { title: '钻机', dataIndex: 'rigNo', width: 90 },
     { title: '班组', dataIndex: 'shift', width: 80 },
     { title: '坐标(X, Y)', width: 200, render: (_, row) => `${row.coordX}, ${row.coordY}` },
@@ -158,19 +169,24 @@ export default function HoleList() {
     },
     {
       title: '操作',
-      width: 150,
+      width: 240,
       fixed: 'right',
       render: (_, record) => (
         <Space size={2}>
           <Button size="small" type="link" onClick={() => openEdit(record)}>
             编辑
           </Button>
+          <VersionHistoryButton kind="hole" entityId={record.id} title={record.holeNo} />
           <Popconfirm
             title={`确认删除 ${record.holeNo}？（同时清除其回次）`}
             onConfirm={async () => {
-              await removeRunsByHole(record.id);
-              await removeHole(record.id);
-              message.success('已删除钻孔及其回次');
+              try {
+                await removeRunsByHole(record.id);
+                await removeHole(record.id);
+                message.success('已删除钻孔及其回次');
+              } catch (error) {
+                message.error((error as Error).message);
+              }
             }}
           >
             <Button size="small" type="link" danger>
@@ -215,7 +231,7 @@ export default function HoleList() {
         </EmptyPanel>
       ) : (
         <Card size="small">
-          <Table rowKey="id" size="small" columns={columns} dataSource={visible} pagination={{ pageSize: 8 }} scroll={{ x: 1500 }} />
+          <Table rowKey="id" size="small" columns={columns} dataSource={visible} pagination={{ pageSize: 8 }} scroll={{ x: 1600 }} />
         </Card>
       )}
 

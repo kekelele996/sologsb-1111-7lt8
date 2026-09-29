@@ -32,6 +32,8 @@ export interface LithoLog {
   logger: string;
   /** 备注 */
   remark?: string;
+  /** 软删除标记：涉及封存深度的清理只置删除态，版本链与查看入口保留 */
+  deleted?: boolean;
 }
 
 /** 区间冲突 */

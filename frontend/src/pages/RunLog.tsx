@@ -6,6 +6,8 @@ import StatBadge from '../components/common/StatBadge';
 import RecoveryBadge from '../components/common/RecoveryBadge';
 import DepthRangeInput from '../components/common/DepthRangeInput';
 import EmptyPanel from '../components/common/EmptyPanel';
+import PendingReviewTag from '../components/review/PendingReviewTag';
+import VersionHistoryButton from '../components/review/VersionHistoryButton';
 import { useDepthCalc } from '../hooks/useDepthCalc';
 import { useHoleStore } from '../stores/holeStore';
 import { useRunStore } from '../stores/runStore';
@@ -126,7 +128,16 @@ export default function RunLog() {
   };
 
   const columns: TableColumnsType<DrillRun> = [
-    { title: '回次号', dataIndex: 'runNo', width: 110, render: (v: string) => <Text strong>{v}</Text> },
+    {
+      title: '回次号',
+      width: 150,
+      render: (_, row) => (
+        <Space size={4}>
+          <Text strong>{row.runNo}</Text>
+          <PendingReviewTag kind="run" entityId={row.id} />
+        </Space>
+      ),
+    },
     { title: '深度区间(m)', width: 140, render: (_, row) => `${row.fromDepth}~${row.toDepth}` },
     { title: '进尺(m)', dataIndex: 'footage', width: 100, align: 'right' },
     { title: '岩芯长度(m)', dataIndex: 'coreLength', width: 120, align: 'right' },
@@ -138,14 +149,21 @@ export default function RunLog() {
     { title: '备注', dataIndex: 'remark', ellipsis: true, render: (v?: string) => v ?? '-' },
     {
       title: '操作',
-      width: 140,
+      width: 230,
       fixed: 'right',
       render: (_, record) => (
         <Space size={2}>
           <Button size="small" type="link" onClick={() => openEdit(record)}>
             编辑
           </Button>
-          <Popconfirm title={`确认删除回次 ${record.runNo}？`} onConfirm={() => removeRun(record.id).then(() => message.success('已删除'))}>
+          <VersionHistoryButton kind="run" entityId={record.id} title={record.runNo} />
+          <Popconfirm
+            title={`确认删除回次 ${record.runNo}？`}
+            onConfirm={async () => {
+              const mode = await removeRun(record.id);
+              message.success(mode === 'soft' ? '该回次涉及封存深度，已转为软删除并保留版本链（见封存复核台）' : '已删除');
+            }}
+          >
             <Button size="small" type="link" danger>
               删除
             </Button>
@@ -200,7 +218,7 @@ export default function RunLog() {
         <EmptyPanel description="该孔暂无回次记录" actionText="录入回次" onAction={openCreate} />
       ) : (
         <Card size="small">
-          <Table rowKey="id" size="small" columns={columns} dataSource={tableRuns} pagination={{ pageSize: 10 }} scroll={{ x: 1300 }} />
+          <Table rowKey="id" size="small" columns={columns} dataSource={tableRuns} pagination={{ pageSize: 10 }} scroll={{ x: 1450 }} />
         </Card>
       )}
 

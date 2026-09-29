@@ -4,6 +4,8 @@ import type { TableColumnsType } from 'antd';
 import DepthRangeInput from '../components/common/DepthRangeInput';
 import LithoColumn from '../components/common/LithoColumn';
 import EmptyPanel from '../components/common/EmptyPanel';
+import PendingReviewTag from '../components/review/PendingReviewTag';
+import VersionHistoryButton from '../components/review/VersionHistoryButton';
 import { useHoleStore } from '../stores/holeStore';
 import { useRunStore } from '../stores/runStore';
 import { useLithoStore } from '../stores/lithoStore';
@@ -159,7 +161,16 @@ export default function LithoEditor() {
   };
 
   const columns: TableColumnsType<LithoLog> = [
-    { title: '深度区间(m)', width: 130, render: (_, row) => <Text strong>{`${row.fromDepth}~${row.toDepth}`}</Text> },
+    {
+      title: '深度区间(m)',
+      width: 180,
+      render: (_, row) => (
+        <Space size={4}>
+          <Text strong>{`${row.fromDepth}~${row.toDepth}`}</Text>
+          <PendingReviewTag kind="litho" entityId={row.id} />
+        </Space>
+      ),
+    },
     { title: '厚度(m)', width: 90, align: 'right', render: (_, row) => Number((row.toDepth - row.fromDepth).toFixed(2)) },
     { title: '岩性', dataIndex: 'lithology', width: 130, render: (v: string) => <Tag color="geekblue">{v}</Tag> },
     { title: '颜色', dataIndex: 'color', width: 90 },
@@ -171,14 +182,21 @@ export default function LithoEditor() {
     { title: '备注', dataIndex: 'remark', ellipsis: true, render: (v?: string) => v ?? '-' },
     {
       title: '操作',
-      width: 140,
+      width: 230,
       fixed: 'right',
       render: (_, record) => (
         <Space size={2}>
           <Button size="small" type="link" onClick={() => openEdit(record)}>
             编辑
           </Button>
-          <Popconfirm title={`确认删除 ${record.fromDepth}~${record.toDepth}m 编录？`} onConfirm={() => removeLitho(record.id).then(() => message.success('已删除'))}>
+          <VersionHistoryButton kind="litho" entityId={record.id} title={`${record.fromDepth}~${record.toDepth}m`} />
+          <Popconfirm
+            title={`确认删除 ${record.fromDepth}~${record.toDepth}m 编录？`}
+            onConfirm={async () => {
+              const mode = await removeLitho(record.id);
+              message.success(mode === 'soft' ? '该岩性段涉及封存深度，已转为软删除并保留版本链（见封存复核台）' : '已删除');
+            }}
+          >
             <Button size="small" type="link" danger>
               删除
             </Button>
@@ -229,7 +247,7 @@ export default function LithoEditor() {
                 columns={columns}
                 dataSource={holeLogs}
                 pagination={{ pageSize: 8 }}
-                scroll={{ x: 1250 }}
+                scroll={{ x: 1350 }}
                 rowClassName={(row) => (conflictIds.includes(row.id) ? 'conflict-row' : '')}
               />
             </Card>

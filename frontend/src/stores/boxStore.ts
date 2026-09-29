@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../utils/db';
 import { uid } from '../utils/id';
+import { useReviewStore } from './reviewStore';
 import type { CoreBox } from '../types/core-box';
 
 export interface BoxInput {
@@ -23,9 +24,12 @@ interface BoxState {
   hydrate: () => Promise<void>;
   addBox: (input: BoxInput) => Promise<CoreBox>;
   updateBox: (id: string, patch: Partial<BoxInput>) => Promise<void>;
-  removeBox: (id: string) => Promise<void>;
+  /** 删除岩芯箱：涉及封存深度走软删除并保留版本链，返回实际删除方式 */
+  removeBox: (id: string) => Promise<'soft' | 'hard'>;
   /** 标记/取消破损格 */
   toggleDamagedSlot: (id: string, slot: number) => Promise<void>;
+  /** 从 IndexedDB 重新装载（封存复核退回/恢复后同步） */
+  reload: () => Promise<void>;
 }
 
 /** 岩芯箱与格位分配 */
@@ -34,7 +38,7 @@ export const useBoxStore = create<BoxState>()((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const boxes = await db.boxes.orderBy('boxNo').toArray();
+    const boxes = (await db.boxes.orderBy('boxNo').toArray()).filter((b) => !b.deleted);
     set({ boxes, hydrated: true });
   },
 
@@ -67,8 +71,14 @@ export const useBoxStore = create<BoxState>()((set, get) => ({
   },
 
   removeBox: async (id) => {
-    await db.boxes.delete(id);
+    const mode = await useReviewStore.getState().deleteEntity('box', id);
     set({ boxes: get().boxes.filter((b) => b.id !== id) });
+    return mode;
+  },
+
+  reload: async () => {
+    const boxes = (await db.boxes.orderBy('boxNo').toArray()).filter((b) => !b.deleted);
+    set({ boxes });
   },
 
   toggleDamagedSlot: async (id, slot) => {

@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { db } from '../utils/db';
 import { uid } from '../utils/id';
+import { useReviewStore } from './reviewStore';
 import type { DrillRun, RunAnomaly, RunShift } from '../types/drill-run';
 import { footageOf, gradeOf, isAnomaly, recoveryOf, RECOVERY_GRADE_TEXT } from '../utils/recovery';
+import { sealCountOfHole } from '../utils/versioning';
 
 export interface RunInput {
   runNo: string;
@@ -23,8 +25,11 @@ interface RunState {
   hydrate: () => Promise<void>;
   addRun: (input: RunInput) => Promise<DrillRun>;
   updateRun: (id: string, patch: Partial<RunInput>) => Promise<void>;
-  removeRun: (id: string) => Promise<void>;
+  /** 删除回次：涉及封存深度走软删除并保留版本链，返回实际删除方式 */
+  removeRun: (id: string) => Promise<'soft' | 'hard'>;
   removeByHole: (holeId: string) => Promise<void>;
+  /** 从 IndexedDB 重新装载（封存复核退回/恢复后同步） */
+  reload: () => Promise<void>;
 }
 
 /** 回次与采取率派生值：进尺与采取率均由起止深度、岩芯长度自动计算 */
@@ -33,7 +38,7 @@ export const useRunStore = create<RunState>()((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const runs = await db.runs.orderBy('fromDepth').toArray();
+    const runs = (await db.runs.orderBy('fromDepth').toArray()).filter((r) => !r.deleted);
     set({ runs, hydrated: true });
   },
 
@@ -74,14 +79,24 @@ export const useRunStore = create<RunState>()((set, get) => ({
   },
 
   removeRun: async (id) => {
-    await db.runs.delete(id);
+    const mode = await useReviewStore.getState().deleteEntity('run', id);
     set({ runs: get().runs.filter((r) => r.id !== id) });
+    return mode;
   },
 
   removeByHole: async (holeId) => {
+    // 该孔存在封存批次（含版本链）时不允许整孔连带物理删除，提示先在封存复核台处理
+    if (await sealCountOfHole(holeId)) {
+      throw new Error('该钻孔存在封存记录，不能连带清除其回次；请在封存复核台按版本链处理');
+    }
     const ids = get().runs.filter((r) => r.holeId === holeId).map((r) => r.id);
     await db.runs.bulkDelete(ids);
     set({ runs: get().runs.filter((r) => r.holeId !== holeId) });
+  },
+
+  reload: async () => {
+    const runs = (await db.runs.orderBy('fromDepth').toArray()).filter((r) => !r.deleted);
+    set({ runs });
   },
 }));
 

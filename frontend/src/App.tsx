@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout, Menu, Spin, Typography, App as AntApp, Button, Space } from 'antd';
 import {
+  AuditOutlined,
   CompassOutlined,
   DatabaseOutlined,
   DownloadOutlined,
@@ -15,6 +16,7 @@ import { useHoleStore } from './stores/holeStore';
 import { useRunStore } from './stores/runStore';
 import { useBoxStore } from './stores/boxStore';
 import { useLithoStore } from './stores/lithoStore';
+import { useReviewStore } from './stores/reviewStore';
 
 const { Header, Sider, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -25,6 +27,7 @@ const MENU_ITEMS = [
   { key: '/runs', icon: <BarsOutlined />, label: <Link to="/runs">回次记录</Link> },
   { key: '/boxes', icon: <ProfileOutlined />, label: <Link to="/boxes">岩芯箱</Link> },
   { key: '/lithology', icon: <ExperimentOutlined />, label: <Link to="/lithology">岩性编录</Link> },
+  { key: '/review', icon: <AuditOutlined />, label: <Link to="/review">封存复核</Link> },
 ];
 
 /** 应用外壳：左侧导航 + 顶部导出备份，负责一次性的本地数据装载 */
@@ -35,6 +38,7 @@ export default function App() {
   const hydrateRuns = useRunStore((s) => s.hydrate);
   const hydrateBoxes = useBoxStore((s) => s.hydrate);
   const hydrateLithos = useLithoStore((s) => s.hydrate);
+  const hydrateReview = useReviewStore((s) => s.hydrate);
   const location = useLocation();
 
   useEffect(() => {
@@ -42,7 +46,8 @@ export default function App() {
     (async () => {
       try {
         await seedIfEmpty();
-        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos()]);
+        // 封存复核数据（含版本链、软删除归档）需先装载，业务台账据此显示待复核标记
+        await Promise.all([hydrateHoles(), hydrateRuns(), hydrateBoxes(), hydrateLithos(), hydrateReview()]);
       } catch (error) {
         message.error(`本地数据装载失败：${(error as Error).message}`);
       } finally {
@@ -52,7 +57,7 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, message]);
+  }, [hydrateHoles, hydrateRuns, hydrateBoxes, hydrateLithos, hydrateReview, message]);
 
   const selectedKey =
     MENU_ITEMS.map((item) => item.key)

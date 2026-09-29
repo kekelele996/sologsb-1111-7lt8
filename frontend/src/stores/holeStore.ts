@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { db } from '../utils/db';
 import { uid } from '../utils/id';
+import { sealCountOfHole } from '../utils/versioning';
 import type { DrillHole, HoleProgress, SurveyPoint } from '../types/drill-hole';
 import type { DrillRun } from '../types/drill-run';
 import { buildHoleProgress } from '../utils/recovery';
@@ -28,7 +29,10 @@ interface HoleState {
   setCurrentHole: (id: string) => void;
   addHole: (input: HoleInput) => Promise<DrillHole>;
   updateHole: (id: string, patch: Partial<HoleInput>) => Promise<void>;
+  /** 删除钻孔：存在封存批次（版本链）时拦截，避免版本链失去查看入口 */
   removeHole: (id: string) => Promise<void>;
+  /** 从 IndexedDB 重新装载（封存复核退回/恢复后同步） */
+  reload: () => Promise<void>;
   /** 当前钻孔 */
   currentHole: () => DrillHole | undefined;
 }
@@ -40,7 +44,7 @@ export const useHoleStore = create<HoleState>()((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const holes = await db.holes.orderBy('holeNo').toArray();
+    const holes = (await db.holes.orderBy('holeNo').toArray()).filter((h) => !h.deleted);
     set({ holes, currentHoleId: get().currentHoleId || holes[0]?.id || '', hydrated: true });
   },
 
@@ -76,8 +80,22 @@ export const useHoleStore = create<HoleState>()((set, get) => ({
   },
 
   removeHole: async (id) => {
+    if (await sealCountOfHole(id)) {
+      throw new Error('该钻孔存在封存批次与版本链，不能删除；如需清理请先在封存复核台处理');
+    }
     await db.holes.delete(id);
-    set({ holes: get().holes.filter((h) => h.id !== id) });
+    set((state) => ({
+      holes: state.holes.filter((h) => h.id !== id),
+      currentHoleId: state.currentHoleId === id ? state.holes.find((h) => h.id !== id)?.id ?? '' : state.currentHoleId,
+    }));
+  },
+
+  reload: async () => {
+    const holes = (await db.holes.orderBy('holeNo').toArray()).filter((h) => !h.deleted);
+    set((state) => ({
+      holes,
+      currentHoleId: holes.some((h) => h.id === state.currentHoleId) ? state.currentHoleId : holes[0]?.id ?? '',
+    }));
   },
 
   currentHole: () => get().holes.find((h) => h.id === get().currentHoleId),
